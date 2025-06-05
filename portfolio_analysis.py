@@ -1,7 +1,9 @@
-import streamlit as st
-import yfinance as yf
 import pandas as pd
+import streamlit as st
 import ta
+import yfinance as yf
+
+from chart_patterns import detect_chart_pattern
 
 st.title("Portfolio Technical Analysis (NSE/BSE Supported)")
 
@@ -93,6 +95,7 @@ if uploaded_file is not None:
                     })
                     continue
 
+                # Extract relevant data
                 close = data['Close'].squeeze()
                 volume = data['Volume'].squeeze()
                 close_5y = data_5y['Close'].squeeze()
@@ -194,7 +197,34 @@ if uploaded_file is not None:
 
     # ...after the loop...
     st.subheader("Analysis Results")
-    st.dataframe(pd.DataFrame(results), use_container_width=True)
+    results_df = pd.DataFrame(results)
+    st.dataframe(results_df, use_container_width=True)
+
+    # Add interactivity for chart pattern analysis
+    st.markdown("### Click below to analyze chart pattern for a stock")
+    tickers = results_df['Ticker'].tolist()
+    selected_ticker = st.selectbox("Select Ticker for Chart Pattern Analysis", tickers)
+
+    if selected_ticker:
+        row = df_portfolio[df_portfolio['Ticker'] == selected_ticker]
+        if not row.empty:
+            exchange = row['Exchange'].iloc[0].upper()
+            yf_ticker = f"{selected_ticker}.NS" if exchange == "NSE" else f"{selected_ticker}.BO"
+            data = yf.download(yf_ticker, period='1y')  # Changed to 1 year
+            if not data.empty and 'Close' in data and not data['Close'].dropna().empty:
+                close_prices = data['Close'].dropna()
+                close_prices = close_prices.reset_index()
+                close_prices.columns = ['Date', 'Close']
+                close_prices = close_prices.set_index('Date')
+                #st.write(f"Data points available: {len(close_prices)}")
+                pattern, recommendation = detect_chart_pattern(close_prices['Close'])
+                st.write(f"**Detected Pattern:** {pattern}")
+                st.write(f"**Recommendation:** {recommendation.upper()}")
+                st.line_chart(close_prices['Close'])
+            else:
+                st.warning("No price data available for this ticker.")
+        else:
+            st.error("Selected ticker not found in uploaded portfolio.")
 
     st.markdown("""
     ### Rationale for Buy/Sell/Hold Recommendations
